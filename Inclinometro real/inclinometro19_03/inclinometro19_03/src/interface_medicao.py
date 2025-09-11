@@ -14,7 +14,7 @@ import csv
 from datetime import datetime
 
 # Definições de variaveis
-SERIAL_PORT = 'COM4' # porta usada
+SERIAL_PORT = 'COM7' # porta usada pelo USB-485
 BAUD_RATE = 115200
 HEADER_BYTE = 0XFF
 PACKET_SIZE = 9 # de 0 a 12 bytes
