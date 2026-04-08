@@ -15,10 +15,7 @@ typedef struct{
     float adxl_angl_x;
     float adxl_angl_y;
     float adxl_angl_z;
-    float mpu_gyro_x;
-    float mpu_gyro_y;
-    float mpu_gyro_z;
-
+    float hmc_heading;
 } SENSOR_CONTROL_T, *SENSOR_CONTROL_PTR;
 
 extern SENSOR_CONTROL_T sensorControl;
