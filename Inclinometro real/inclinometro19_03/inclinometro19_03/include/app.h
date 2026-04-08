@@ -5,13 +5,13 @@
 #include <HardwareSerial.h>
 #include <Wire.h>
 
-typedef enum{
+typedef enum {
     WAIT_TILL_START,
     GET_MEASURE,
     SEND_MEASURE
 } app_state;
 
-typedef struct{
+typedef struct {
     float adxl_angl_x;
     float adxl_angl_y;
     float adxl_angl_z;
@@ -20,7 +20,7 @@ typedef struct{
 
 extern SENSOR_CONTROL_T sensorControl;
 
-typedef struct{
+typedef struct {
     uint8_t rs485_message[100];
     char rs485_command;
     uint8_t rs485_size;

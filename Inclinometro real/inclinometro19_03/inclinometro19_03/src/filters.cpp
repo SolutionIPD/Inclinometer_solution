@@ -1,13 +1,9 @@
 #include "filters.h"
 
-
-
 //complementar
 FILTER_MOVING_AVERAGE_T filterAvg;
 FILTER_BUTTERWORTH_ANGLES_T filterButter;
 FILTER_COMPLEMENTARY_T filterComp;
-
-
 
 void filter_complementary_init(FILTER_COMPLEMENTARY_PTR filterComp) {
     filterComp->pitch = 0.0f;
@@ -20,35 +16,22 @@ void filter_complementary_update(FILTER_COMPLEMENTARY_PTR filterComp) {
     //auto accel = adxl355.getAccelerations();
     adxl_measurements(&sensorControl);
     //sensors_event_t a, g, temp;
-    //mpu.getEvent(&a, &g, &temp);
-    //mpu_measurements(&sensorControl);
     //float ax = atan2f(accel.x,(sqrt(accel.y*accel.y)+sqrt(accel.x*accel.x)))*(RAD_TO_DEG);
     //float ay = atan2f(accel.y,(sqrt(accel.x*accel.x)+sqrt(accel.z*accel.z)))*(RAD_TO_DEG);
     //float az = atan2f(accel.z,(sqrt(accel.x*accel.x)+sqrt(accel.y*accel.y)))*(RAD_TO_DEG);
 
     float dt = 0.01f;
-    float gyro_ox = (filterComp->roll);  //(sensorControl.mpu_gyro_x*dt)*RAD_TO_DEG;
-    float gyro_oy  = (filterComp->pitch);  //(sensorControl.mpu_gyro_y*dt)*RAD_TO_DEG;
-    float gyro_oz = (filterComp->yaw); //(sensorControl.mpu_gyro_z*dt)*RAD_TO_DEG;
-
-    //float gyro_ox = (filterComp->roll) + (g.gyro.x*dt)*RAD_TO_DEG;
-    //float gyro_oy  = (filterComp->pitch)  + (g.gyro.y*dt)*RAD_TO_DEG;
-    //float gyro_oz = (filterComp->yaw) + (g.gyro.z*dt)*RAD_TO_DEG;
+    float gyro_ox = (filterComp->roll);  
+    float gyro_oy  = (filterComp->pitch);
+    float gyro_oz = (filterComp->yaw); 
 
     filterComp->roll = ALPHA * gyro_ox + (1.0f - ALPHA) * sensorControl.adxl_angl_x;
     filterComp->pitch  = ALPHA * gyro_oy  + (1.0f - ALPHA) * sensorControl.adxl_angl_y;
     filterComp->yaw = ALPHA * gyro_oz + (1.0f - ALPHA) * sensorControl.adxl_angl_z;
 
-    //filterComp->roll = ALPHA * gyro_ox + (1.0f - ALPHA) * ax;
-    //filterComp->pitch  = ALPHA * gyro_oy  + (1.0f - ALPHA) * ay;
-    //filterComp->yaw = ALPHA * gyro_oz + (1.0f - ALPHA) * az;
-
-    //Serial.println(sensorControl.mpu_gyro_x);
     //Serial.println(sensorControl.adxl_angl_x);
     //Serial.println(filterComp->pitch);
     //Serial.println(filterComp->yaw);
-
-
 }
 
 void filter_channel_init(FILTER_BUTTERWORTH_PTR f) {
@@ -65,17 +48,13 @@ void filter_channel_init(FILTER_BUTTERWORTH_PTR f) {
     f->y2 = 0.0f;
 }
 
-
 void filter_butterworth_init(FILTER_BUTTERWORTH_ANGLES_PTR filterButter) {
-    //
     filter_channel_init(&filterButter->bw_roll);
     filter_channel_init(&filterButter->bw_pitch);
     filter_channel_init(&filterButter->bw_yaw);
 }
 
-
-
-float filter_butterworth_update(FILTER_BUTTERWORTH_PTR filterButter, float input){
+float filter_butterworth_update(FILTER_BUTTERWORTH_PTR filterButter, float input) {
     if(filterButter->x1 == 0.0f && filterButter->x2 == 0.0f &&
        filterButter->y1 == 0.0f && filterButter->y2 == 0.0f) {
         filterButter->x1 = filterButter->x2 = input;
@@ -97,8 +76,7 @@ float filter_butterworth_update(FILTER_BUTTERWORTH_PTR filterButter, float input
 }
 
 
-
-void filter_moving_avg_init(FILTER_MOVING_AVERAGE_PTR filterAvg){
+void filter_moving_avg_init(FILTER_MOVING_AVERAGE_PTR filterAvg) {
     for(int i=0; i<MOVING_AVG_SIZE;i++){
         filterAvg->pitch_buffer[i]=0.0f;
         filterAvg->roll_buffer[i]=0.0f;
@@ -108,12 +86,11 @@ void filter_moving_avg_init(FILTER_MOVING_AVERAGE_PTR filterAvg){
     filterAvg->count=0;
 }
 
-void filter_moving_avg_update(FILTER_MOVING_AVERAGE_PTR filterAvg, float new_roll, float new_pitch, float new_yaw){
+void filter_moving_avg_update(FILTER_MOVING_AVERAGE_PTR filterAvg, float new_roll, float new_pitch, float new_yaw) {
     filterAvg->pitch_buffer[filterAvg->index]=new_pitch;
     filterAvg->roll_buffer[filterAvg->index]=new_roll;
     filterAvg->yaw_buffer[filterAvg->index]=new_yaw;
    
-
     filterAvg->index = (filterAvg->index+1) % MOVING_AVG_SIZE;
 
     if(filterAvg->count<MOVING_AVG_SIZE){
@@ -140,9 +117,7 @@ void filter_moving_avg_calculate(FILTER_MOVING_AVERAGE_PTR filterAvg) {
     filterAvg->sum_deviation += filterAvg->deviation;
 }
 
-
-
-void filter_init(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg){
+void filter_init(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg) {
     filter_complementary_init(filterComp);
   
     filter_butterworth_init(filterButter);
@@ -150,7 +125,7 @@ void filter_init(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_
     filter_moving_avg_init(filterAvg);
 }
 
-void filter_apply(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg){
+void filter_apply(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg) {
     filter_complementary_update(filterComp);
 
     Serial.print("Complementary x angle: "); Serial.println(filterComp->roll, 6);
@@ -177,8 +152,7 @@ void filter_apply(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES
     delay(10);
 }
 
-
-void filter_clear(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg){
+void filter_clear(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES_PTR filterButter, FILTER_MOVING_AVERAGE_PTR filterAvg) {
     filterComp->roll=0;
     filterComp->pitch=0;
     filterComp->yaw=0;
@@ -197,7 +171,3 @@ void filter_clear(FILTER_COMPLEMENTARY_PTR filterComp, FILTER_BUTTERWORTH_ANGLES
     filterAvg->count=0;
     filterAvg->index=0;
 }
-
-
-
-    

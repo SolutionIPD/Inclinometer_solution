@@ -9,6 +9,7 @@
 #define TX      4
 #define RE      3    
 #define ADO     38
+
 void pins_init(void);
 
 #endif

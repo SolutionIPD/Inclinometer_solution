@@ -1,28 +1,21 @@
 #include "rs485.h"
 
-
-
-
-
 HardwareSerial mySerial(1);
 typedef uint8_t byte;
 
-void rs485_init(){
+void rs485_init() {
   pinMode(RE, OUTPUT);
   digitalWrite(RE, LOW);
   mySerial.begin(115200, SERIAL_8N1, 5, 4);
 }
 
-
-void rs485_send_data(FILTER_MOVING_AVERAGE_PTR filterAvg)
-{
+void rs485_send_data(FILTER_MOVING_AVERAGE_PTR filterAvg) {
 #ifdef DEBUG
   Serial.println("Enviando dados acumulados via RS485...");
 #endif
   digitalWrite(RE, HIGH);
   //filter_apply(&filterComp, &filterButter, filterAvg);
 
- 
   byte buffer[9];
   buffer [0] = 0xFF;
 
@@ -31,7 +24,6 @@ void rs485_send_data(FILTER_MOVING_AVERAGE_PTR filterAvg)
     byte bytes[2];
   } data;
 
-  
   data.value = (int16_t)(filterAvg->avg_roll* 100);
   buffer[1] = data.bytes[1];
   buffer[2] = data.bytes[0];
@@ -67,7 +59,6 @@ void rs485_send_data(FILTER_MOVING_AVERAGE_PTR filterAvg)
   //Serial.print(" Deviation: ");
   //Serial.println(dev_roll);
 
-
   #ifdef DEBUG
   Serial.print("Buffer enviado: ");
   for (int i = 0; i < 9; i++) {
@@ -87,24 +78,17 @@ void rs485_send_data(FILTER_MOVING_AVERAGE_PTR filterAvg)
   #ifdef DEBUG
     Serial.println("Dados enviados!");
   #endif
-
-
 }
 
-bool rs485_recvCommand(RS485_CONTROL_PTR rs485Control)
-{
-
+bool rs485_recvCommand(RS485_CONTROL_PTR rs485Control) {
   //String data = mySerial.readString();
   //Serial.println(data);
   uint8_t indexMsg = 0;
-  if (mySerial.available())
-  {
+  if (mySerial.available()) {
     //Serial.print("oie");
-    while (mySerial.available()) // Verifica se há dados disponíveis na UART
-    { 
+    while (mySerial.available()) {// Verifica se há dados disponíveis na UART
       //Serial.print("funcionoU");
-      
-      
+
       rs485Control->rs485_message[indexMsg] = mySerial.read();
     
       Serial.println(rs485Control->rs485_message[indexMsg]);

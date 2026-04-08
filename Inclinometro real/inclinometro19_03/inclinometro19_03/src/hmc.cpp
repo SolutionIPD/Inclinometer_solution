@@ -3,7 +3,7 @@
 
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12); // qqr valor
 
-void hmc_init(void){
+void hmc_init(void) {
     Wire.begin();
     mag.SET
     if (!mag.begin()) {
@@ -14,7 +14,7 @@ void hmc_init(void){
     Serial.println("HMC iniciado com sucesso!");
 }
 
-void hmc_measurements(SENSOR_CONTROL_PTR sensorControl){
+void hmc_measurements(SENSOR_CONTROL_PTR sensorControl) {
     float h_offsetX = -72.045; // pegos do calib_HMC e calculados para chegar nisso
     float h_offsetY = -8.545;
     float h_offsetZ = -21.125;

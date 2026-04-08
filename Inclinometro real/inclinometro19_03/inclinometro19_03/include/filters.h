@@ -1,7 +1,6 @@
 #ifndef FILTERS_H_
 #define FILTERS_H_
 
-
 #include "mpu.h"
 #include "app.h"
 #include "adxl.h"
@@ -14,7 +13,7 @@
 #define fs 100 //100Hz
 #define fc 5//Hz
 
-typedef struct{
+typedef struct {
     float pitch_buffer[MOVING_AVG_SIZE];
     float roll_buffer[MOVING_AVG_SIZE];
     float yaw_buffer[MOVING_AVG_SIZE];
@@ -25,10 +24,7 @@ typedef struct{
     float sum_deviation;
     int index;
     int count;
-}FILTER_MOVING_AVERAGE_T, *FILTER_MOVING_AVERAGE_PTR;
-
-
-
+} FILTER_MOVING_AVERAGE_T, *FILTER_MOVING_AVERAGE_PTR;
 
 typedef struct {
     float pitch;
@@ -36,7 +32,7 @@ typedef struct {
     float yaw;
 } FILTER_COMPLEMENTARY_T, *FILTER_COMPLEMENTARY_PTR ;
 
-typedef struct{
+typedef struct {
     float b0, b1, b2;
     float a1, a2;
     float x1, x2;

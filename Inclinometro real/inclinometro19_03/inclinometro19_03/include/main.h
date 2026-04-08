@@ -2,7 +2,7 @@
 #define MAIN_H_
 
 #include "adxl.h"
-#include "mpu.h"
+#include "hmc.h"
 #include "filters.h"
 #include "pins.h"
 #include "rs485.h"
@@ -10,4 +10,5 @@
 #include <PL_ADXL355.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+
 #endif
