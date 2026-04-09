@@ -4,8 +4,6 @@
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12); // qqr valor
 
 void hmc_init(void) {
-    Wire.begin();
-    mag.SET
     if (!mag.begin()) {
         Serial.println("HMC5883L não detectado!");
         while (1);
