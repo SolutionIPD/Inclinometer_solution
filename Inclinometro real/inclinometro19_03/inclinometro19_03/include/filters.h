@@ -1,7 +1,6 @@
 #ifndef FILTERS_H_
 #define FILTERS_H_
 
-#include "mpu.h"
 #include "app.h"
 #include "adxl.h"
 #include "stdio.h"
