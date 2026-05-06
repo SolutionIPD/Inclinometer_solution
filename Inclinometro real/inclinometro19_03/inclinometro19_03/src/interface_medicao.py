@@ -1,20 +1,14 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from tkinter.messagebox import askretrycancel, showinfo
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import threading
-import os
 from collections import deque
-import serial
-from serial.serialutil import SerialException
-import struct
-import time
-import csv
+import serial.tools.list_ports
+import struct, queue, time, csv, threading, os, serial
 from datetime import datetime
 
 # Definições de variaveis
-SERIAL_PORT = 'COM7' # porta usada pelo USB-485
 BAUD_RATE = 115200
 HEADER_BYTE = 0XFF
 PACKET_SIZE = 9 # de 0 a 12 bytes
@@ -23,53 +17,59 @@ SCALE_FACTOR = 100.0 # usado para converter os valores recebidos para float
 SAVE_FOLDER = os.path.expanduser("~/Desktop/dados_gravados")
 
 class SerialReader: 
-    def __init__(self, port, baud_rate):
-        self.port = port
-        self.baud_rate = baud_rate
-        self.ser = None
+    def __init__(self, serial_conn):
+        self.ser = serial_conn
         self.active = False
-        self.connect()
 
     def set_active(self, active):
         self.active = active
 
-    def connect(self):
-        try:
-            self.ser = serial.Serial(self.port, self.baud_rate, timeout=1)
-            time.sleep(1)  # Aguarda um segundo para garantir que a conexão seja estável
-            print(f"Serial aberto: {self.ser.is_open}")
-            print(f"Porta: {self.ser.port}")
-            print("Porta aberta e OK")  # Para teste
-        except SerialException as e:
-            print(f"Erro ao abrir a porta {self.port}: {e}")
-            self.ser = None
-        
-    def read_data(self):
-        if not self.active: # para não ler se não estiver ativo
-            return None
-        
+    def read_data(self):        
         start = time.time()
         while self.ser.in_waiting < PACKET_SIZE:
-            if time.time() - start > 1:  # Timeout de 1 segundo
+            if time.time() - start > 1:
                 return None
+        
         time.sleep(0.01)
-    # Lê exatamente o pacote inteiro
+
         dados = self.ser.read(PACKET_SIZE)
     
-    # Verifica se o primeiro byte é o cabeçalho esperado
         if dados[0] != HEADER_BYTE:
             print("Cabeçalho inválido, tentando sincronizar...")
-        # Se não for o cabeçalho, descarte um byte e tente novamente
             self.ser.read(1)
             return None
 
-    # Desempacota os dados (usando os 8 bytes restantes)
         try:
             roll, pitch, yaw, dev = struct.unpack('>hhhh', dados[1:])
             return [v / SCALE_FACTOR for v in (roll, pitch, yaw, dev)]
         except struct.error as e:
             print(f"Erro no desempacotamento: {e}")
             return None
+        
+class SerialMonitor(threading.Thread):
+    def __init__(self, serial_reader, data_queue):
+        super().__init__()
+        self.serial_reader = serial_reader
+        self.data_queue = data_queue
+        self.alive = threading.Event()
+        self.alive.set()
+
+    def run(self):
+        while self.alive.is_set():
+            try:
+                data = self.serial_reader.read_data()
+                if data:
+                    self.data_queue.put(data)
+
+            except serial.SerialException:
+                print("[INFO] Serial desconectada, encerrando thread")
+                break
+
+            time.sleep(0.01)
+
+    def stop(self):
+        self.alive.clear()
+        self.serial_reader.set_active(False)
 
 class InitialScreen(tk.Frame):
     def __init__(self, root, start_callback):
@@ -78,6 +78,12 @@ class InitialScreen(tk.Frame):
 
         self.depth_var = tk.StringVar()
         self.side_var  = tk.StringVar()
+        self.selected_port = tk.StringVar()
+
+        self.serial_conn = None
+        self.monitor = None
+
+        self.data_queue = queue.Queue()
 
         innerFrame = tk.Frame(self)
         innerFrame.pack(expand=True)
@@ -85,58 +91,90 @@ class InitialScreen(tk.Frame):
         innerFrame.grid_columnconfigure(0, weight=1)
         innerFrame.grid_columnconfigure(1, weight=1)
 
+        ttk.Label(innerFrame, text="Porta COM:").grid(row=0, column=0, sticky="w")
+        self.port_combobox = ttk.Combobox(innerFrame, textvariable=self.selected_port, width=25)
+        self.port_combobox.grid(row=0, column=1, sticky="w")
+        ttk.Button(innerFrame, text="Atualizar", command=self.refresh_ports).grid(row=0, column=2)
+
         ttk.Label(innerFrame, text="Digite a profundidade (em metros): \n(Para número com virgula, use .)").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        self.depth_entry = ttk.Entry(innerFrame, textvariable=self.depth_var, width=20)
+        self.depth_entry = ttk.Entry(innerFrame, textvariable=self.depth_var, width=30)
         self.depth_entry.grid(row=1, column=1, padx=5, pady=5)
 
         ttk.Label(innerFrame, text="Digite a face do mergulho: \n(NOTA: isso será usado no nome do arquivo)").grid(row=2, column=0, sticky="n", padx=5, pady=5)
-        self.side_entry = ttk.Entry(innerFrame, textvariable=self.side_var, width=20)
+        self.side_entry = ttk.Entry(innerFrame, textvariable=self.side_var, width=30)
         self.side_entry.grid(row=2, column=1, padx=5, pady=5)
 
         tk.Button(innerFrame, text="Confirmar e continuar", command=self.on_continue).grid(row=3, column=0, columnspan=2, pady=10)
 
         self.pack(expand=True)
 
+    def refresh_ports(self):
+        self.ports = [port.device for port in serial.tools.list_ports.comports()]
+        self.port_combobox['values'] = self.ports
+        if self.ports:
+            self.selected_port.set(self.ports[0])
+
     def on_continue(self):
         try:
             depth = float(self.depth_var.get())
             side  = self.side_var.get().strip()
+
             if not side:
                 answer = askretrycancel("AVISO!", "A face de mergulho não pode ser vazia, tente novamente")
                 if answer:
                     self.side_entry.delete(0, tk.END)
                 return
-            
-            try:
-                ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-                ser.close()
-            except SerialException:
-                answer = showinfo("ERRO!", f"Não foi possivel acessar a porta {SERIAL_PORT}")
-                self.master.destroy()
-                return
-            self.destroy()
-            self.start_callback(depth, side)
 
-        except ValueError: # erro no valor de profundidade
-            answer = askretrycancel("AVISO!", "Profundiade inválida, tente novamente")
+            port = self.selected_port.get()
+            if not port:
+                showinfo("ERRO!", "Selecione uma porta COM")
+                return
+
+            if not self.serial_conn or not self.serial_conn.is_open:
+                try:
+                    self.serial_conn = serial.Serial(port=port, baudrate=115200, timeout=1)
+
+                    print(f"[INFO] Conectado à porta {port}")
+
+                    self.serial_reader = SerialReader(self.serial_conn) # cria reader
+
+                    self.monitor = SerialMonitor(self.serial_reader, self.data_queue) # thread de leitura
+                    self.monitor.start()
+
+                except Exception as e:
+                    print(f"[ERRO] Falha ao conectar: {e}")
+                    messagebox.showerror("Erro de Conexão", str(e))
+                    return
+            else:
+                print("[INFO] Porta já estava conectada")
+
+            self.destroy()
+            self.start_callback(depth, side, self.serial_conn, self.data_queue)
+
+        except ValueError:
+            answer = askretrycancel("AVISO!", "Profundidade inválida, tente novamente")
             if answer:
                 self.depth_entry.delete(0, tk.END)
                 self.side_entry.delete(0, tk.END)
 
 class DynamicPlotApp(tk.Frame):
-    def __init__(self, root, depth, side):
+    def __init__(self, root, depth, side, serial_conn, data_queue):
         super().__init__(root)
         self.root = root
         self.depth_initial = depth
         self.side = side
+        self.closing = False
+        self.ended = False
+
+        self.serial_conn = serial_conn
+        self.data_queue = data_queue
+
         label = tk.Label(self, text="Tela de Graficos")
         label.grid(row=0, column=0)
-        self.serial_reader = SerialReader(SERIAL_PORT, BAUD_RATE)
 
         self.stop_event = threading.Event()
         self.lock = threading.Lock()
 
-        # inicializa as variáveis
         self.setup_variables()
         self.create_widgets()
         self.setup_plots()
@@ -213,37 +251,47 @@ class DynamicPlotApp(tk.Frame):
     def read_and_record(self):
         if not self.active_colect:
             self.active_colect = True
-            self.serial_reader.set_active(True) # ativa a leitura serial
 
-            self.collected_data = []  # Limpa a lista de dados coletados
-            self.serial_reader.ser.write(b"S")  # Envia o comando para o dispositivo
+            self.collected_data = []
+
+            # envia comando pro dispositivo
+            if self.serial_conn and self.serial_conn.is_open:
+                self.serial_conn.write(b"S")
+            else:
+                print("[ERRO] Serial não está conectada")
+                return
 
             self.start_read_button.config(text="Coletando dados...", state=tk.DISABLED)
             self.repeat_button.config(state=tk.DISABLED)
+
             threading.Thread(target=self._thread_colect, daemon=True).start()
 
     def _thread_colect(self):
         try:
             received_data = []
             current_depth = float(self.depth[self.indice])
-            timeout = time.time() + 2
+            timeout = time.time() + 5
             attempts = 0
 
-            self.serial_reader.set_active(True)
-            self.serial_reader.ser.reset_input_buffer()
-
             while len(received_data) < 11 and time.time() < timeout:
-                pacote = self.serial_reader.read_data()
-                attempts += 1 # para contar a quantidade caso de erro
-                if pacote:
-                    received_data.append(pacote)
-                    self.all_data.append((current_depth, *pacote))
+                try:
+                    pacote = self.data_queue.get(timeout=0.2)
+                    attempts += 1
 
-                    # Atualiza status na interface
-                    self.root.after(0, lambda c=len(received_data): self.status_label.config(text=f'Coletado {c}/11'))
-                    time.sleep(0.01) # para evitar sobrecarga
+                    if pacote:
+                        received_data.append(pacote)
+                        self.all_data.append((current_depth, *pacote))
+                        if not self.closing:
+                            try:
+                                self.root.after(0,lambda c=len(received_data):self.status_label.config(text=f'Coletado {c}/11'))
+                            except:
+                                pass
+                except:
+                    pass  # timeout da fila, continua tentando
+
             if len(received_data) == 11:
-                last_packet = received_data[-1] # pra pegar o ultimo pacote
+                last_packet = received_data[-1]
+
                 with self.lock:
                     self.depth_data.append(current_depth)
                     self.roll_data.append(last_packet[0])
@@ -251,24 +299,43 @@ class DynamicPlotApp(tk.Frame):
                     self.yaw_data.append(last_packet[2])
                     self.dev_data.append(last_packet[3])
 
-                self.root.after(0, self._update_plots)
-                self.indice += 1 # se deu certo, vai para a próxima DEPTH 
+                if not self.closing:
+                    self.root.after(0, self._update_plots)
+                self.indice += 1
 
-                if current_depth == 0: # chegou no topo
-                    self.root.after(5000, self.collectd_done)
+                if current_depth == 0:
+                    if not self.closing:
+                        self.root.after(5000, self.collect_done)
                     return
             else:
-                self.root.after(0, lambda: self.status_label.config(text=f"Coleta interrompida {len(received_data)}/11"))
+                if not self.closing:
+                    try:
+                        self.root.after(0,lambda: self.status_label.config(text=f"Coleta interrompida {len(received_data)}/11"))
+                    except:
+                        pass
+
                 self.all_data = [data for data in self.all_data if data[0] != current_depth]
-            time.sleep(3) # para ver a mensagem
-            self.root.after(0, lambda: self.status_label.config(text="Pronto"))
+
+            time.sleep(3)
+            if not self.closing:
+                try:
+                    self.root.after(0, lambda: self.status_label.config(text="Pronto"))
+                except:
+                    pass
+
         finally:
-            if current_depth != 0: # só vai para a próxima se não chegou em 0m
-                self.serial_reader.set_active(False)
+            if current_depth != 0:
                 self.active_colect = False
-                self.start_read_button.config(text="Iniciar Leitura e Gravação", state=tk.NORMAL) # para voltar o texto original
-                self.repeat_button.config(state=tk.NORMAL) # para ativar novamente
-                self.depth_label.config(text=f"Medindo: {self.depth[self.indice]:.1f} metros") # atualiza o self.depth
+
+                self.start_read_button.config(
+                    text="Iniciar Leitura e Gravação",
+                    state=tk.NORMAL
+                )
+                self.repeat_button.config(state=tk.NORMAL)
+
+                self.depth_label.config(
+                    text=f"Medindo: {self.depth[self.indice]:.1f} metros"
+                )
 
     def repeat(self):
         if self.indice == 0: # se apertar sem rodar antes
@@ -330,25 +397,14 @@ class DynamicPlotApp(tk.Frame):
             print(f"Erro ao atulizar os plots: {e}")
 
     def _update_plots_thread(self):
-        print("Thread de plot iniciada!") 
         while not self.stop_event.is_set():
             if self.plotting_active and not self.paused:
-                if hasattr(self.serial_reader, 'active') and self.serial_reader.active:
-                    data = self.serial_reader.read_data()
-                    if data:
-                        with self.lock:
-                            self.depth_data.append(float(self.depth[self.indice]))
-                            self.roll_data.append(data[0])
-                            self.pitch_data.append(data[1])
-                            self.yaw_data.append(data[2])
-                            self.dev_data.append(data[3])
+                self.root.after(0, self._update_plots)
+            time.sleep(0.1)
 
-                        self.root.after(0, self._update_plots)
-                time.sleep(0.05)
-
-    def collectd_done(self):
-        self.serial_reader.set_active(False)
+    def collect_done(self):
         self.active_colect = False
+
         self.start_read_button.config(text="Coleta Finalizada", state=tk.DISABLED)
         self.depth_label.config(text=f"Terminou os {self.depth_initial}m")
 
@@ -356,7 +412,8 @@ class DynamicPlotApp(tk.Frame):
             self.save_on_exit = False
             self.save_data()
 
-        self.root.after(5000, self.end_all) # fecha após 5 segundos
+        # agenda fechamento
+        self.root.after(5000, self.end_all)
 
     def tela_popup(self, nome_local):
         popup = tk.Toplevel(self.root)
@@ -401,27 +458,42 @@ class DynamicPlotApp(tk.Frame):
             return False
 
     def end_all(self):
+        if self.ended:
+            return
+        
+        self.ended = True
+        print("Fechando tudo...")
+
+        self.closing = True
         self.stop_event.set()
         self.plotting_active = False
 
-        if self.serial_reader.ser and self.serial_reader.ser.is_open:
-            self.serial_reader.ser.close()
-            print("Porta serial fechada.") 
+        if hasattr(self, 'monitor') and self.monitor:
+            self.monitor.stop()
+            self.monitor.join()
 
-        self.root.destroy()
+        if self.serial_conn and self.serial_conn.is_open:
+            self.serial_conn.close()
+            print("Porta serial fechada.")
 
-        os._exit(0)
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except:
+            pass
 
     def on_close(self):
+        if self.ended:
+            return
+
         print("Fechando a aplicação...")
-        self.serial_reader.set_active(False)
 
         if self.save_on_exit and self.all_data:
-            self.save_on_exit = False
             self.save_data()
         else:
             print("Nenhum dado para ser salvo")
-            self.end_all() # fecha a tela se não houver dados
+
+        self.end_all()
 
 class MainApp(tk.Tk):
     def __init__(self):
@@ -447,10 +519,10 @@ class MainApp(tk.Tk):
             screen.tkraise()
 
 if __name__ == "__main__":
-    def start_main_app(depth, side):
+    def start_main_app(depth, side, serial_conn, data_queue):
         for widget in root.winfo_children():
             widget.destroy()
-        app = DynamicPlotApp(root, depth, side)
+        app = DynamicPlotApp(root, depth, side, serial_conn, data_queue)
         app.grid(row=0, column=0)
 
         # Caso seja fechado clicando no "X"
