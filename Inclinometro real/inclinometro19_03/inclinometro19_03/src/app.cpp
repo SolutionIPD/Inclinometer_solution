@@ -11,8 +11,8 @@ RS485_CONTROL_T rs485Control;
 void app_init() {
     incl_state = WAIT_TILL_START;
     filter_init(&filterComp, &filterButter, &filterAvg);
-    hmc_init();
     adxl_init();
+    hmc_init();
 }
 
 void app_poll() {

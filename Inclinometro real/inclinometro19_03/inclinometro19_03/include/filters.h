@@ -3,6 +3,7 @@
 
 #include "app.h"
 #include "adxl.h"
+#include "hmc.h"
 #include "stdio.h"
 #include "math.h"
 

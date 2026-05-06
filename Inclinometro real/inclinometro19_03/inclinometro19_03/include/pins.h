@@ -3,7 +3,7 @@
 
 #include <Wire.h>
 
-#define SCL     37
+#define SCL     20
 #define SDA     21
 #define RX      5
 #define TX      4
